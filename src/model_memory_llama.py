@@ -22,7 +22,16 @@ from src.utils import CfgNode, print0
 
 
 class MemoryAttention(nn.Module):
-    """Custom attention layer that incorporates a memory module."""
+    """
+    Custom attention layer that incorporates a memory module.
+    
+    This layer extends standard self-attention by:
+    1. First applying normal self-attention to the input
+    2. Then using a memory module to augment the representation
+    3. Finally producing a gated combination of regular attention and memory-aware outputs
+    
+    This allows the model to access information beyond the current context window.
+    """
 
     def __init__(self, config: LlamaConfig, self_attn: nn.Module) -> None:
         super().__init__()
@@ -55,7 +64,16 @@ class MemoryAttention(nn.Module):
 
 
 class CustomLlamaDecoderLayer(LlamaDecoderLayer):
-    """Extends the Llama decoder layer with memory attention."""
+    """
+    Extends the Llama decoder layer with memory attention.
+    
+    For each transformer layer, it:
+    1. Performs normal self-attention computation if memory is disabled
+    2. Or uses memory-augmented attention if memory is enabled
+    3. Returns both updated hidden states and updated memory
+    
+    This allows memory to be propagated through the entire model depth.
+    """
 
     def __init__(self, config: LlamaConfig, layer_idx: int, use_memory: bool) -> None:
         super().__init__(config, layer_idx)
@@ -100,7 +118,17 @@ class CustomLlamaDecoderLayer(LlamaDecoderLayer):
 
 
 class LlamaMem(LlamaForCausalLM):
-    """Custom Llama model with memory-augmented decoder layers."""
+    """
+    Custom Llama model with memory-augmented decoder layers.
+    
+    Adds a persistent memory bank to the LlamaForCausalLM architecture by:
+    1. Replacing standard decoder layers with memory-augmented versions
+    2. Managing a persistent memory tensor across batches and inference steps
+    3. Handling memory initialization, storage and retrieval
+    
+    The memory bank allows the model to maintain state beyond the context window,
+    enabling effective reasoning over much longer contexts.
+    """
 
     @staticmethod
     def get_default_config():
