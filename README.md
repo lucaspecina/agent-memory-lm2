@@ -1,3 +1,22 @@
+
+This is a fork of the official implementation of the paper "LM2: Large Memory Models". I'm extending the original work.
+
+### New ideas
+
+- **Hierarchical/Multiple Memory Modules**: Implement a hierarchical architecture for memory modules that selectively activates based on relevance. Rather than engaging the entire memory for every task, the system would first access the most relevant or general memories, diving deeper only when necessary. This approach enables significantly larger memory capacity without performance penalties during inference. Alternatively, we could develop sequential memory modules that activate progressively - starting with a primary module and expanding to secondary modules as needed.
+
+- **Dynamic Differentiable Memory**: This concept draws inspiration from human memory systems by implementing a three-tiered approach:
+  1. **Short-term memory**: Represented by the model's context window
+  2. **Episodic/session memory**: Implemented through the new memory modules
+  3. **Long-term memory**: Encoded through model parameter fine-tuning
+
+  These hierarchical memory modules could support a "sleep phase" mechanism where the most frequently accessed or important information from general memory modules is periodically consolidated into the model parameters through fine-tuning. This approach would complement existing external memory systems like RAG, creating a comprehensive memory architecture.
+
+
+
+---
+---
+
 # LM2
 [![CC BY-NC 4.0](https://licensebuttons.net/l/by-nc/4.0/88x31.png)](https://creativecommons.org/licenses/by-nc/4.0/)
 
