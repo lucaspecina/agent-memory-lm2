@@ -6,6 +6,8 @@ from transformers import AutoTokenizer
 from collections import Counter
 import matplotlib.pyplot as plt
 from datetime import datetime
+import struct
+import binascii
 
 def read_llama_shard(filename):
     """Read a binary shard file created for Llama-3 training."""
@@ -15,6 +17,81 @@ def read_llama_shard(filename):
     print(f"  - File size: {os.path.getsize(filename) / 1024:.2f} KB")
     print(f"  - Data format: uint32 tokens ({tokens.nbytes / 1024:.2f} KB in memory)")
     return tokens
+
+def analyze_raw_binary_structure(filename, bytes_to_show=128):
+    """Analyze the raw binary structure of a file."""
+    file_size = os.path.getsize(filename)
+    
+    print(f"\n--- RAW BINARY STRUCTURE ANALYSIS ---")
+    print(f"File: {filename}")
+    print(f"Total size: {file_size} bytes ({file_size/1024:.2f} KB)")
+    
+    # Read the beginning of the file for analysis
+    with open(filename, 'rb') as f:
+        header_bytes = f.read(min(bytes_to_show, file_size))
+    
+    # Print hex dump of the beginning of the file
+    print("\nHex dump of first bytes:")
+    print("-" * 79)
+    
+    # Create a formatted hex dump
+    for i in range(0, len(header_bytes), 16):
+        chunk = header_bytes[i:i+16]
+        hex_values = ' '.join(f'{b:02x}' for b in chunk)
+        ascii_values = ''.join(chr(b) if 32 <= b <= 126 else '.' for b in chunk)
+        
+        # Format the line with both hex and ASCII
+        hex_part = f"{hex_values:<48}"  # Pad to fixed width
+        print(f"{i:08x}:  {hex_part}  |{ascii_values}|")
+    
+    print("-" * 79)
+    
+    # Check if the file follows the expected uint32 token format
+    if file_size % 4 == 0:
+        num_tokens = file_size // 4
+        print(f"\nFile contains exactly {num_tokens} uint32 tokens (4 bytes each)")
+        
+        # Analyze the first few tokens
+        with open(filename, 'rb') as f:
+            first_tokens_bytes = f.read(min(40, file_size))  # Read up to 10 tokens (40 bytes)
+        
+        # Unpack the bytes into uint32 tokens
+        tokens = []
+        for i in range(0, len(first_tokens_bytes), 4):
+            if i + 4 <= len(first_tokens_bytes):
+                token = struct.unpack('<I', first_tokens_bytes[i:i+4])[0]  # Little-endian uint32
+                tokens.append(token)
+        
+        print("\nFirst tokens (decimal values):")
+        token_rows = [tokens[i:i+5] for i in range(0, len(tokens), 5)]
+        for i, row in enumerate(token_rows):
+            print(f"  Tokens {i*5}-{i*5+len(row)-1}: {' '.join(f'{t:10d}' for t in row)}")
+            
+        print("\nSame tokens in hexadecimal:")
+        for i, row in enumerate(token_rows):
+            print(f"  Tokens {i*5}-{i*5+len(row)-1}: {' '.join(f'0x{t:08x}' for t in row)}")
+    else:
+        print(f"\nFile size ({file_size} bytes) is not divisible by 4.")
+        print("This doesn't match the expected format of uint32 tokens.")
+    
+    # Check for a potential header
+    if file_size >= 8:
+        with open(filename, 'rb') as f:
+            potential_header = f.read(8)
+        
+        # Try to interpret first 8 bytes in different ways
+        u64_value = struct.unpack('<Q', potential_header)[0]  # Little-endian uint64
+        u32_values = struct.unpack('<II', potential_header)  # Two little-endian uint32s
+        
+        print("\nPotential header interpretation:")
+        print(f"  As uint64: {u64_value}")
+        print(f"  As two uint32s: {u32_values}")
+        
+    print("\nBinary file structure summary:")
+    print("  - Each token is stored as a 4-byte (32-bit) unsigned integer")
+    print("  - Tokens are stored in little-endian byte order (standard for most platforms)")
+    print("  - No file header or metadata - raw token sequence only")
+    print("  - LLama-3 vocabulary size is ~128K tokens (~128000 possible values)")
 
 def analyze_token_distribution(tokens, tokenizer, max_tokens=50):
     """Analyze the distribution of tokens in the data."""
@@ -48,11 +125,15 @@ def visualize_document_lengths(doc_lengths, output_file=None):
         print("(Visualization available if you uncomment the plt.show() line)")
         # plt.show()  # Uncomment to display plot
 
-def inspect_shard(filename, num_samples=5, max_tokens_per_sample=100, analyze_tokens=True, visualize=False):
+def inspect_shard(filename, num_samples=5, max_tokens_per_sample=100, analyze_tokens=True, visualize=False, show_binary=False):
     """Perform a detailed inspection of a shard file."""
     print("\n" + "="*80)
     print(f"DETAILED ANALYSIS OF: {filename}")
     print("="*80)
+    
+    # Analyze raw binary structure if requested
+    if show_binary:
+        analyze_raw_binary_structure(filename)
     
     tokens = read_llama_shard(filename)
     print(f"\n--- Basic Information ---")
@@ -141,7 +222,7 @@ def inspect_shard(filename, num_samples=5, max_tokens_per_sample=100, analyze_to
     if analyze_tokens:
         analyze_token_distribution(tokens, tokenizer)
 
-def analyze_dataset(pattern, max_files=5):
+def analyze_dataset(pattern, max_files=5, show_binary=False):
     """Analyze all files matching the pattern."""
     print(f"\n{'='*40} DATASET ANALYSIS {'='*40}")
     print(f"Pattern: {pattern}")
@@ -177,21 +258,27 @@ def analyze_dataset(pattern, max_files=5):
         file_type = "train" if "_train_" in filename else "val" if "_val_" in filename else "unknown"
         print(f"  {i+1}. {filename} ({filesize:.2f} KB) - {file_type}")
     
+    # Show raw binary structure for first file if requested
+    if show_binary and files:
+        analyze_raw_binary_structure(files[0])
+    
     # Analyze a subset of files in detail
     print(f"\nAnalyzing {min(max_files, len(files))} files in detail...")
     for filename in files[:max_files]:
-        inspect_shard(filename, num_samples=3, analyze_tokens=False)
+        inspect_shard(filename, num_samples=3, analyze_tokens=False, show_binary=False)
         
     print(f"\nAnalysis completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python inspect_data.py <path_to_bin_file_or_pattern> [--full]")
+        print("Usage: python inspect_data.py <path_to_bin_file_or_pattern> [--full] [--binary]")
         print("  --full    Perform full analysis (more samples, token distribution, etc.)")
+        print("  --binary  Show raw binary structure of the file(s)")
         return
     
     pattern = sys.argv[1]
     full_analysis = "--full" in sys.argv
+    show_binary = "--binary" in sys.argv
     
     # If analyzing a single file
     if os.path.isfile(pattern):
@@ -199,10 +286,11 @@ def main():
                       num_samples=10 if full_analysis else 5, 
                       max_tokens_per_sample=200 if full_analysis else 100,
                       analyze_tokens=full_analysis,
-                      visualize=full_analysis)
+                      visualize=full_analysis,
+                      show_binary=show_binary)
     # If analyzing multiple files
     else:
-        analyze_dataset(pattern, max_files=5 if full_analysis else 2)
+        analyze_dataset(pattern, max_files=5 if full_analysis else 2, show_binary=show_binary)
 
 if __name__ == "__main__":
     main() 

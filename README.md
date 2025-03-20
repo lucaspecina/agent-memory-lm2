@@ -20,7 +20,7 @@ python data_proc/smollm_simple.py -v fineweb -m llama-3 -n 10000 -s 1000000 --st
 
 To see what the data looks like:
 ```bash
-python inspect_data.py "datasets/fineweb-ddp-llama3/smollm-corpus_*.bin"
+python inspect_data.py "datasets/fineweb-ddp-llama3/smollm-corpus_*.bin" --binary
 ```
 
 To train the model:
