@@ -1,0 +1,9 @@
+torch
+torchvision
+torchaudio
+transformers==4.45.1
+omegaconf
+hydra-core
+datasets
+numpy
+tqdm 

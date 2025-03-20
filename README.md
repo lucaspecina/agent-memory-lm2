@@ -13,6 +13,21 @@ This is a fork of the official implementation of the paper "LM2: Large Memory Mo
   These hierarchical memory modules could support a "sleep phase" mechanism where the most frequently accessed or important information from general memory modules is periodically consolidated into the model parameters through fine-tuning. This approach would complement existing external memory systems like RAG, creating a comprehensive memory architecture.
 
 
+If I don't want to download the entire dataset, I can use:
+```bash
+python data_proc/smollm_simple.py -v fineweb -m llama-3 -n 10000 -s 1000000 --streaming
+```
+
+To see what the data looks like:
+```bash
+python inspect_data.py "datasets/fineweb-ddp-llama3/smollm-corpus_*.bin"
+```
+
+To train the model:
+```bash
+python train.py model=llama pretrain=default input_bin="datasets/fineweb-ddp-llama3/smollm-corpus_train_*.bin" input_val_bin="datasets/fineweb-ddp-llama3/smollm-corpus_val_*.bin" model.sequence_length=1024 model.use_memory=True train.batch_size=4 train.dtype="bfloat16" train.learning_rate=1e-5 train.warmup_iters=100 train.lr_decay_frac=0.0 train.max_iters=1000 train.log_freq=5 train.save_freq=100
+```
+
 
 ---
 ---
