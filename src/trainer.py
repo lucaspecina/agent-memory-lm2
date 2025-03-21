@@ -88,9 +88,12 @@ class Trainer:
         torch_rng_state = torch.get_rng_state().cpu()  # Make sure it's on CPU
         cuda_rng_states = [state.cpu() for state in torch.cuda.get_rng_state_all()]
 
+        # Check if model is wrapped in DDP
+        model_state_dict = model.module.state_dict() if hasattr(model, 'module') else model.state_dict()
+
         training_state = {
             "iteration": current_iter,
-            "model_state_dict": model.module.state_dict(),
+            "model_state_dict": model_state_dict,
             "optimizer_state_dict": self.optimizer.state_dict(),
             "loss": self.loss.item(),
             "random_state": random.getstate(),
