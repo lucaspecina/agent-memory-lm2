@@ -66,6 +66,29 @@
             "stopOnEntry": false,
             "showReturnValue": true,
             "purpose": ["debug-in-terminal"]
+        },
+        {
+            "name": "Debug Memory Evaluation",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/test_memory.py",
+            "args": [
+                "--base_model_path", "outputs_base/ckpt_iter_1000.pth",
+                "--memory_model_path", "outputs_memory/ckpt_iter_1000.pth",
+                "--model_name", "meta-llama/Llama-3-8B",
+                "--context_lengths", "1024,2048,4096",
+                "--num_trials", "2",
+                "--output_dir", "memory_test_results",
+                "--device", "cuda"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "stopOnEntry": false,
+            "showReturnValue": true,
+            "purpose": ["debug-in-terminal"]
         }
     ]
 } 

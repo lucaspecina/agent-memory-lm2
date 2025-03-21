@@ -15,8 +15,31 @@ from src.utils import print0, set_seed
 
 
 def ddp_setup():
-    init_process_group(backend="nccl")
-    torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
+    # Check if this is a distributed run
+    if "WORLD_SIZE" in os.environ and int(os.environ.get("WORLD_SIZE", "1")) > 1:
+        # Use proper environment variables for distributed training
+        if "MASTER_ADDR" not in os.environ:
+            os.environ["MASTER_ADDR"] = "localhost"
+        if "MASTER_PORT" not in os.environ:
+            os.environ["MASTER_PORT"] = "12355"
+        
+        # Use gloo backend for Windows
+        if os.name == 'nt':
+            backend = "gloo"
+        else:
+            backend = "nccl"
+            
+        init_process_group(backend=backend)
+        torch.cuda.set_device(int(os.environ.get("LOCAL_RANK", "0")))
+    else:
+        # Single GPU or CPU setup - no need for process group
+        os.environ["WORLD_SIZE"] = "1"
+        os.environ["RANK"] = "0"
+        os.environ["LOCAL_RANK"] = "0"
+        
+        # Still set the cuda device if CUDA is available
+        if torch.cuda.is_available():
+            torch.cuda.set_device(0)
 
 
 def load_model_state(model, optimizer_state_dict, rank, train_config):
@@ -105,8 +128,10 @@ def main(cfg):
     train_config.memory_slots = cfg.model.memory_slots
 
     # Set up distributed training parameters
-    rank = int(os.environ["LOCAL_RANK"])
-    world_size = int(os.environ["WORLD_SIZE"])
+    rank = int(os.environ.get("LOCAL_RANK", "0"))
+    world_size = int(os.environ.get("WORLD_SIZE", "1"))
+
+    # Batch and sequence parameters
     B = cfg.train.batch_size
     T = cfg.model.sequence_length
 
@@ -158,8 +183,10 @@ def main(cfg):
     # Configure optimizer with state restoration
     optimizer = load_model_state(model, optimizer_state_dict, rank, train_config)
 
-    # Wrap model in DDP
-    model = DDP(model, find_unused_parameters=False)
+    # Wrap model in DDP only if distributed training is initialized
+    if torch.distributed.is_initialized():
+        model = DDP(model, find_unused_parameters=False)
+    # Otherwise use the model directly without DDP wrapper
 
     # Define trainer
     trainer = Trainer(
@@ -191,27 +218,34 @@ def main(cfg):
                     val_loss += loss.item()
                 val_loss /= 100
 
-                # Aggregate losses from all nodes
-                val_loss_tensor = torch.tensor(val_loss, device=trainer.device)
-                train_loss_tensor = torch.tensor(trainer.loss.item(), device=trainer.device)
+                # Check if distributed training is initialized
+                if torch.distributed.is_initialized():
+                    # Aggregate losses from all nodes
+                    val_loss_tensor = torch.tensor(val_loss, device=trainer.device)
+                    train_loss_tensor = torch.tensor(trainer.loss.item(), device=trainer.device)
 
-                # Sum losses across all nodes
-                torch.distributed.all_reduce(val_loss_tensor, op=torch.distributed.ReduceOp.SUM)
-                torch.distributed.all_reduce(train_loss_tensor, op=torch.distributed.ReduceOp.SUM)
+                    # Sum losses across all nodes
+                    torch.distributed.all_reduce(val_loss_tensor, op=torch.distributed.ReduceOp.SUM)
+                    torch.distributed.all_reduce(train_loss_tensor, op=torch.distributed.ReduceOp.SUM)
 
-                # Calculate mean across nodes
-                world_size = torch.distributed.get_world_size()
-                val_loss = val_loss_tensor.item() / world_size
-                train_loss = train_loss_tensor.item() / world_size
+                    # Calculate mean across nodes
+                    world_size = torch.distributed.get_world_size()
+                    val_loss = val_loss_tensor.item() / world_size
+                    train_loss = train_loss_tensor.item() / world_size
+                else:
+                    train_loss = trainer.loss.item()
 
-            if int(os.environ["RANK"]) == 0:
+            # Print only from rank 0 or in non-distributed case
+            if int(os.environ.get("RANK", "0")) == 0:
                 print0(f"iter {trainer.iter_num}: train loss {train_loss:.5f}, valid loss {val_loss:.5f}")
 
     trainer.set_callback("on_batch_end", batch_end_callback)
 
     trainer.run(current_time, iter_num)
 
-    destroy_process_group()
+    # Only destroy process group if it was initialized
+    if torch.distributed.is_initialized():
+        destroy_process_group()
 
 
 if __name__ == "__main__":

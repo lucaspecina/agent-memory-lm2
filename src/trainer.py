@@ -135,7 +135,12 @@ class Trainer:
         os.makedirs(snapshot_dir, exist_ok=True)
 
         # Setup the optimizer with correct initial state
-        self.optimizer = model.module.configure_optimizers(config)
+        if hasattr(model, 'module'):
+            # DDP wrapped model
+            self.optimizer = model.module.configure_optimizers(config)
+        else:
+            # Direct model instance
+            self.optimizer = model.configure_optimizers(config)
         if iter_num > 0:
             self.verify_training_state(self.optimizer.state_dict(), iter_num)
             
@@ -158,15 +163,6 @@ class Trainer:
                 x = x.to(self.device)
                 y = y.to(self.device)
                 
-                # Print GPU diagnostics on first iteration
-                if self.iter_num == 0 and micro_step == 0:
-                    print(f"\n===== BATCH GPU PLACEMENT =====")
-                    print(f"Input tensor device: {x.device}")
-                    print(f"Target tensor device: {y.device}")
-                    if torch.cuda.is_available():
-                        print(f"GPU memory after batch loading: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
-                    print(f"==============================\n")
-
                 if self.ddp:
                     model.require_backward_grad_sync = micro_step == self.grad_accum_steps - 1
 
@@ -178,13 +174,6 @@ class Trainer:
 
                 # Backward pass
                 loss.backward(retain_graph=False)
-                
-                # Print GPU memory after first backward pass
-                if self.iter_num == 0 and micro_step == 0:
-                    if torch.cuda.is_available():
-                        print(f"\n===== AFTER BACKWARD PASS =====")
-                        print(f"GPU memory after backward: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
-                        print(f"==============================\n")
 
             if self.ddp:
                 dist.all_reduce(self.lossf, op=dist.ReduceOp.AVG)
