@@ -1,8 +1,9 @@
 {
     "version": "0.2.0",
     "configurations": [
+
         {
-            "name": "Debug LM2 Training",
+            "name": "Debug train.sh equivalent",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/train.py",
@@ -11,16 +12,17 @@
                 "pretrain=default",
                 "input_bin=datasets/fineweb-ddp-llama3/smollm-corpus_train_*.bin",
                 "input_val_bin=datasets/fineweb-ddp-llama3/smollm-corpus_val_*.bin",
-                "model.sequence_length=1024",
-                "model.use_memory=True",
-                "train.batch_size=4",
+                "model.sequence_length=2048",
+                "model.use_memory=true",
+                "train.batch_size=1",
                 "train.dtype=bfloat16",
-                "train.learning_rate=1e-5",
-                "train.warmup_iters=100",
+                "train.learning_rate=0.0002",
+                // "train.warmup_iters=700",
+                "train.warmup_iters=100", 
                 "train.lr_decay_frac=0.0",
-                "train.max_iters=1000",
-                "train.log_freq=5",
-                "train.save_freq=100"
+                "train.max_iters=600000",
+                "train.log_freq=10",
+                "train.save_freq=10"
             ],
             "console": "integratedTerminal",
             "justMyCode": false,
@@ -29,44 +31,9 @@
                 "RANK": "0",
                 "LOCAL_RANK": "0",
                 "WORLD_SIZE": "1"
-            },
-            "stopOnEntry": false,
-            "showReturnValue": true,
-            "purpose": ["debug-in-terminal"]
+            }
         },
-        {
-            "name": "Debug LM2 Small Run (10 iterations)",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}/train.py",
-            "args": [
-                "model=llama3.2-1b",
-                "pretrain=default",
-                "input_bin=datasets/fineweb-ddp-llama3/smollm-corpus_train_*.bin",
-                "input_val_bin=datasets/fineweb-ddp-llama3/smollm-corpus_val_*.bin",
-                "model.sequence_length=512",
-                "model.use_memory=True",
-                "train.batch_size=2",
-                "train.dtype=bfloat16",
-                "train.learning_rate=1e-5",
-                "train.warmup_iters=2",
-                "train.lr_decay_frac=0.0",
-                "train.max_iters=10",
-                "train.log_freq=1",
-                "train.save_freq=5"
-            ],
-            "console": "integratedTerminal",
-            "justMyCode": false,
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}",
-                "RANK": "0",
-                "LOCAL_RANK": "0",
-                "WORLD_SIZE": "1"
-            },
-            "stopOnEntry": false,
-            "showReturnValue": true,
-            "purpose": ["debug-in-terminal"]
-        },
+
         {
             "name": "Debug Memory Evaluation",
             "type": "python",

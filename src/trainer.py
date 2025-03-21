@@ -58,7 +58,7 @@ class Trainer:
         self.log_freq = config.log_freq
         self.save_freq = config.save_freq
         self.grad_accum_steps = grad_accum_steps
-        self.ddp = True
+        self.ddp = torch.distributed.is_initialized()
 
         # Set initial learning rate and verify state if resuming
         if iter_num > 0:
@@ -145,11 +145,11 @@ class Trainer:
             self.verify_training_state(self.optimizer.state_dict(), iter_num)
             
         # Print GPU memory at start of training
-        if torch.cuda.is_available():
-            print(f"\n===== TRAINING START GPU STATS =====")
-            print(f"GPU memory at start: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
-            print(f"GPU memory reserved: {torch.cuda.memory_reserved() / 1e9:.2f} GB")
-            print(f"===================================\n")
+        # if torch.cuda.is_available():
+        #     print(f"\n===== TRAINING START GPU STATS =====")
+        #     print(f"GPU memory at start: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
+        #     print(f"GPU memory reserved: {torch.cuda.memory_reserved() / 1e9:.2f} GB")
+        #     print(f"===================================\n")
 
         while True:
             # Training section
@@ -186,11 +186,24 @@ class Trainer:
                 param_group["lr"] = lr
             self.optimizer.step()
 
-            self.trigger_callbacks("on_batch_end")
+            # Only trigger callbacks every 10 iterations
+            if self.iter_num % 10 == 0 and self.iter_num != 0:
+                self.trigger_callbacks("on_batch_end")
+            
+            # Print iteration status after each iteration
+            is_main_process = not self.ddp or dist.get_rank() == 0
+            if is_main_process:
+                print(f"Iteration {self.iter_num} completed - Loss: {self.loss.item():.4f}, LR: {lr:.6f}")
+                
+                # Print additional info every 10 iterations
+                if self.iter_num % 10 == 0:
+                    print(f"--- Progress: {self.iter_num}/{config.max_iters} ({self.iter_num/config.max_iters*100:.1f}%) ---")
+            
             self.iter_num += 1
 
             # Save checkpoint if needed
-            if self.iter_num % self.save_freq == 0 and dist.get_rank() == 0:
+            is_main_process = not self.ddp or dist.get_rank() == 0
+            if self.iter_num % self.save_freq == 0 and is_main_process:
                 ckpt_path = self.save_training_state(model, snapshot_dir, self.iter_num)
                 saved_snapshots.append(ckpt_path)
                 print0(f"Checkpoint saved at iteration {self.iter_num}")
