@@ -1,6 +1,7 @@
-torch
-torchvision
-torchaudio
+--find-links https://download.pytorch.org/whl/cu124
+torch==2.6.0+cu124
+torchvision==0.21.0+cu124
+torchaudio==2.6.0+cu124
 transformers==4.45.1
 omegaconf
 hydra-core

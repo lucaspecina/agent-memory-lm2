@@ -38,9 +38,20 @@ class Trainer:
 
         self.device = self.local_rank = local_rank
         self.model = self.model.to(self.device)
+        
+        # GPU diagnostics
+        print(f"\n===== MODEL GPU PLACEMENT =====")
+        print(f"Model device: {next(model.parameters()).device}")
+        num_params = sum(p.numel() for p in model.parameters())
+        print(f"Model parameters: {num_params:,} ({num_params/1e6:.2f}M)")
+        if torch.cuda.is_available():
+            print(f"GPU memory after model placement: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
+            print(f"GPU memory reserved: {torch.cuda.memory_reserved() / 1e9:.2f} GB")
+        print(f"==============================\n")
 
         ptdtype = {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}[config.dtype]
         self.ctx = torch.amp.autocast(device_type="cuda", dtype=ptdtype)
+        print(f"Using {config.dtype} precision with autocast")
 
         # Initialize training state
         self.iter_num = iter_num
@@ -127,6 +138,13 @@ class Trainer:
         self.optimizer = model.module.configure_optimizers(config)
         if iter_num > 0:
             self.verify_training_state(self.optimizer.state_dict(), iter_num)
+            
+        # Print GPU memory at start of training
+        if torch.cuda.is_available():
+            print(f"\n===== TRAINING START GPU STATS =====")
+            print(f"GPU memory at start: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
+            print(f"GPU memory reserved: {torch.cuda.memory_reserved() / 1e9:.2f} GB")
+            print(f"===================================\n")
 
         while True:
             # Training section
@@ -139,6 +157,15 @@ class Trainer:
                 x, y = self.train_loader.next_batch()
                 x = x.to(self.device)
                 y = y.to(self.device)
+                
+                # Print GPU diagnostics on first iteration
+                if self.iter_num == 0 and micro_step == 0:
+                    print(f"\n===== BATCH GPU PLACEMENT =====")
+                    print(f"Input tensor device: {x.device}")
+                    print(f"Target tensor device: {y.device}")
+                    if torch.cuda.is_available():
+                        print(f"GPU memory after batch loading: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
+                    print(f"==============================\n")
 
                 if self.ddp:
                     model.require_backward_grad_sync = micro_step == self.grad_accum_steps - 1
@@ -151,6 +178,13 @@ class Trainer:
 
                 # Backward pass
                 loss.backward(retain_graph=False)
+                
+                # Print GPU memory after first backward pass
+                if self.iter_num == 0 and micro_step == 0:
+                    if torch.cuda.is_available():
+                        print(f"\n===== AFTER BACKWARD PASS =====")
+                        print(f"GPU memory after backward: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
+                        print(f"==============================\n")
 
             if self.ddp:
                 dist.all_reduce(self.lossf, op=dist.ReduceOp.AVG)

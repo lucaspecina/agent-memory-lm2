@@ -7,10 +7,13 @@ channels:
 dependencies:
   - python=3.10
   - pip
-  - pytorch
-  - torchvision
-  - torchaudio
-  - pytorch-cuda
+  - pytorch=2.6.0
+  - torchvision=0.21.0
+  - torchaudio=2.6.0
+  - pytorch-cuda=12.4
   - transformers==4.45.1
   - omegaconf
   - hydra-core
+  - datasets
+  - numpy
+  - tqdm

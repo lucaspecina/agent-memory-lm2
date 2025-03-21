@@ -87,5 +87,6 @@ class CfgNode:
 
 
 def print0(*args, **kwargs):
-    if int(os.environ["RANK"]) == 0:
+    # Default to single-process mode if RANK is not set
+    if os.environ.get("RANK", "0") == "0":
         print(*args, **kwargs)
