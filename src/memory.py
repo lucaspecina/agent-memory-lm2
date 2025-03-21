@@ -20,14 +20,26 @@ class RepeatLinear(nn.Module):
         self,
         in_dim: int,
         out_dim: int,
+        hidden_dim: int = None,  # Add this parameter
     ) -> None:
         super().__init__()
         # Learnable vector 'w' to modulate input features before linear transformation.
         # This vector acts as a feature-wise gate, controlling how each input feature is weighted.
-        self.w = nn.Parameter(torch.randn(in_dim).cuda())
+        self.w = nn.Parameter(torch.randn(in_dim))
         self.linear = nn.Linear(in_dim, out_dim)
+        
+        # Add projection if input dimension doesn't match weight dimension
+        self.hidden_dim = hidden_dim
+        if hidden_dim is not None and hidden_dim != in_dim:
+            self.projection = nn.Linear(hidden_dim, in_dim)
+        else:
+            self.projection = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Project input if dimensions don't match
+        if self.projection is not None:
+            x = self.projection(x)
+            
         w = self.w.unsqueeze(0).repeat(x.size(0), 1, 1)
 
         # Apply element-wise modulation of 'x' using 'w', followed by ReLU and mean pooling.
@@ -118,7 +130,9 @@ class MemoryModule(nn.Module):
 
         # Initialize input gate projector with RepeatLinear
         self.input_gate_projector = RepeatLinear(
-            in_dim=self.mem_slots, out_dim=self.num_gates
+            in_dim=self.mem_slots, 
+            out_dim=self.num_gates,
+            hidden_dim=self.hidden_dim  # Pass the hidden dimension
         )
         # Initialize memory gate projector with GroupLinearLayer
         self.memory_gate_projector = GroupLinearLayer(
@@ -245,6 +259,7 @@ class MemoryModule(nn.Module):
         - Returns the final inputs (with memory) and the updated memory state.
         """
         inputs = inputs.view(inputs.shape[0], inputs.shape[1], -1)
+        input_dim = inputs.size(2)  # Store original input dimension
 
         # Attend over memory to obtain the next memory state
         next_memory = self.attend_over_memory(inputs, memory, attention_mask)
@@ -256,8 +271,15 @@ class MemoryModule(nn.Module):
         # Apply forget gate to retain part of the previous memory
         next_memory += forget_gate * memory
 
-        # Return the updated inputs and the next memory state
-        return inputs + next_memory, next_memory
+        # Project memory back to input dimension for residual connection if dimensions don't match
+        if input_dim != self.mem_slots:
+            if not hasattr(self, 'output_projection'):
+                self.output_projection = nn.Linear(self.mem_slots, input_dim).to(inputs.device)
+            projected_memory = self.output_projection(next_memory)
+            return inputs + projected_memory, next_memory
+        else:
+            # Return the updated inputs and the next memory state
+            return inputs + next_memory, next_memory
 
     def calculate_gate_size(self) -> int:
         """Determine gate size based on gating style (unit or memory-based)."""
